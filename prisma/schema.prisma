@@ -1,0 +1,291 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =====================
+// Auth (Better Auth)
+// =====================
+
+model User {
+  id              String   @id @default(cuid())
+  name            String?
+  email           String   @unique
+  emailVerified   Boolean  @default(false)
+  image           String?
+  lastWorkspaceId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  sessions                Session[]
+  accounts                Account[]
+  workspaceMembers        WorkspaceMember[]
+  expensesPaid            Expense[]         @relation("ExpensePaidBy")
+  uploadedReceipts        Receipt[]         @relation("ReceiptUploadedBy")
+  createdShareLinks       ShareLink[]       @relation("ShareLinkCreatedBy")
+  createdWorkspaceInvites WorkspaceInvite[] @relation("WorkspaceInviteCreatedBy")
+  createdAudits           AIAudit[]         @relation("AIAuditCreatedBy")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+// =====================
+// Expense Docs domain
+// =====================
+
+enum WorkspaceType {
+  PERSONAL
+  SHARED
+}
+
+enum WorkspaceRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum PaymentMethod {
+  CASH
+  DEBIT_CARD
+  CREDIT_CARD
+  BANK_TRANSFER
+  E_WALLET
+  QRIS
+  OTHER
+}
+
+enum ExpenseSource {
+  MANUAL
+  RECEIPT
+}
+
+enum ReceiptStatus {
+  DRAFT
+  CONFIRMED
+  REJECTED
+}
+
+enum ShareResourceType {
+  MONTHLY_REPORT
+  AUDIT_REPORT
+}
+
+enum AIAuditTriggerType {
+  MANUAL
+  AUTO_MONTH_END
+}
+
+model Workspace {
+  id        String        @id @default(cuid())
+  name      String
+  type      WorkspaceType @default(PERSONAL)
+  currency  String        @default("IDR")
+  timezone  String        @default("Asia/Jakarta")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  members         WorkspaceMember[]
+  expenses        Expense[]
+  receipts        Receipt[]
+  reportSnapshots ReportSnapshot[]
+  aiAudits        AIAudit[]
+  shareLinks      ShareLink[]
+  invites         WorkspaceInvite[]
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(EDITOR)
+  joinedAt    DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Expense {
+  id           String  @id @default(cuid())
+  workspaceId  String
+  paidByUserId String
+  receiptId    String?
+
+  amount        Decimal       @db.Decimal(14, 2)
+  title         String
+  category      String
+  paymentMethod PaymentMethod
+  source        ExpenseSource @default(MANUAL)
+
+  expenseDate DateTime
+  note        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  paidBy    User      @relation("ExpensePaidBy", fields: [paidByUserId], references: [id], onDelete: Restrict)
+  receipt   Receipt?  @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, expenseDate])
+  @@index([workspaceId, paidByUserId, expenseDate])
+  @@index([workspaceId, category, expenseDate])
+}
+
+model Receipt {
+  id           String @id @default(cuid())
+  workspaceId  String
+  uploadedById String
+
+  storageKey String @unique
+  fileName   String
+  mimeType   String
+  fileSize   Int
+
+  status ReceiptStatus @default(DRAFT)
+
+  // Optional extracted/filled fields (editable by user)
+  draftAmount   Decimal?  @db.Decimal(14, 2)
+  draftDate     DateTime?
+  draftMerchant String?
+  draftCategory String?
+  draftNote     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  uploadedBy User      @relation("ReceiptUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  expenses   Expense[]
+
+  @@index([workspaceId, status, createdAt])
+}
+
+model ReportSnapshot {
+  id          String @id @default(cuid())
+  workspaceId String
+
+  periodYear  Int
+  periodMonth Int
+
+  totalAmount Decimal @db.Decimal(14, 2)
+  payloadJson Json
+
+  createdAt DateTime @default(now())
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  shareLinks ShareLink[]
+
+  @@unique([workspaceId, periodYear, periodMonth])
+  @@index([workspaceId, createdAt])
+}
+
+model AIAudit {
+  id          String  @id @default(cuid())
+  workspaceId String
+  createdById String?
+
+  periodYear  Int
+  periodMonth Int
+  triggerType AIAuditTriggerType
+
+  summary             String
+  insightsJson        Json
+  recommendationsJson Json
+
+  createdAt DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("AIAuditCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, periodYear, periodMonth])
+}
+
+model ShareLink {
+  id               String  @id @default(cuid())
+  workspaceId      String
+  reportSnapshotId String?
+  createdById      String
+
+  resourceType ShareResourceType
+  token        String            @unique
+  passwordHash String?
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  reportSnapshot ReportSnapshot? @relation(fields: [reportSnapshotId], references: [id], onDelete: SetNull)
+  createdBy      User            @relation("ShareLinkCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, createdAt])
+}
+
+model WorkspaceInvite {
+  id          String        @id @default(cuid())
+  workspaceId String
+  createdById String
+  role        WorkspaceRole
+
+  token     String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("WorkspaceInviteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, createdAt])
+}
