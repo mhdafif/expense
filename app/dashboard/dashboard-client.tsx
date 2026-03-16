@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PaymentMethod } from "@prisma/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 
 type Expense = {
   id: string;
@@ -90,7 +91,7 @@ function useExpenses(workspaceId: string, month: string, category: string) {
       const res = await fetch(`/api/v1/workspaces/${workspaceId}/expenses?${params.toString()}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok || !json?.success) {
-        throw new Error(json?.error?.message || "Gagal mengambil data");
+        throw new Error(json?.error?.message || "Failed to load expenses");
       }
       return (json?.data?.items || []) as Expense[];
     },
@@ -107,6 +108,7 @@ export default function DashboardClient({
   memberships: WorkspaceMembership[];
 }) {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   const monthDefault = useMemo(() => {
     const d = new Date();
@@ -150,7 +152,7 @@ export default function DashboardClient({
     });
     const json = await res.json();
     if (!res.ok || !json?.success) {
-      throw new Error(json?.error?.message || "Gagal update snapshot report");
+      throw new Error(json?.error?.message || t("dashboard.snapshotFailed"));
     }
     return json.data as { id: string };
   };
@@ -159,10 +161,10 @@ export default function DashboardClient({
     const res = await fetch(`/api/v1/workspaces/${activeWorkspaceId}/invites`, { cache: "no-store" });
     const { json, raw } = await readApiResponse(res);
     if (!res.ok || !json?.success) {
-      throw new Error(json?.error?.message || raw || "Gagal mengambil invite");
+      throw new Error(json?.error?.message || raw || t("dashboard.loadInviteFailed"));
     }
     setInvites((json.data || []) as WorkspaceInvite[]);
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceId, t]);
 
   const createWorkspaceInvite = async () => {
     setIsCreatingInvite(true);
@@ -174,13 +176,13 @@ export default function DashboardClient({
       });
       const { json, raw } = await readApiResponse(res);
       if (!res.ok || !json?.success) {
-        throw new Error(json?.error?.message || raw || "Gagal membuat invite");
+        throw new Error(json?.error?.message || raw || t("dashboard.createInviteFailed"));
       }
       setInviteUrl(String(json.data.url || ""));
       await loadInvites();
-      setSuccessState("Invite link berhasil dibuat");
+      setSuccessState(t("dashboard.createInviteSuccess"));
     } catch (err) {
-      setErrorState(err instanceof Error ? err.message : "Gagal membuat invite");
+      setErrorState(err instanceof Error ? err.message : t("dashboard.createInviteFailed"));
     } finally {
       setIsCreatingInvite(false);
     }
@@ -190,11 +192,11 @@ export default function DashboardClient({
     try {
       const res = await fetch(`/api/v1/workspaces/${activeWorkspaceId}/invites/${inviteId}/revoke`, { method: "POST" });
       const { json, raw } = await readApiResponse(res);
-      if (!res.ok || !json?.success) throw new Error(json?.error?.message || raw || "Gagal revoke invite");
+      if (!res.ok || !json?.success) throw new Error(json?.error?.message || raw || t("dashboard.revokeInviteFailed"));
       await loadInvites();
-      setSuccessState("Invite berhasil direvoke");
+      setSuccessState(t("dashboard.revokeInviteSuccess"));
     } catch (err) {
-      setErrorState(err instanceof Error ? err.message : "Gagal revoke invite");
+      setErrorState(err instanceof Error ? err.message : t("dashboard.revokeInviteFailed"));
     }
   };
 
@@ -205,7 +207,7 @@ export default function DashboardClient({
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(url);
-        setSuccessState("Link invite berhasil dicopy");
+        setSuccessState(t("dashboard.copyInviteSuccess"));
         return;
       }
 
@@ -222,10 +224,10 @@ export default function DashboardClient({
       document.body.removeChild(el);
 
       if (!copied) throw new Error("copy failed");
-      setSuccessState("Link invite berhasil dicopy");
+      setSuccessState(t("dashboard.copyInviteSuccess"));
     } catch {
       // Fallback for non-secure context (e.g. http on mobile): ask user to copy manually.
-      setErrorState("Auto copy gagal. Tekan lama link lalu pilih Copy.");
+      setErrorState(t("dashboard.copyInviteFailed"));
     } finally {
       setIsCopyingInvite(false);
     }
@@ -241,11 +243,11 @@ export default function DashboardClient({
         body: JSON.stringify({ workspaceId }),
       });
       const json = await res.json();
-      if (!res.ok || !json?.success) throw new Error(json?.error?.message || "Gagal ganti workspace");
+      if (!res.ok || !json?.success) throw new Error(json?.error?.message || "Failed to switch workspace");
       setActiveWorkspaceId(workspaceId);
       window.location.reload();
     } catch (err) {
-      setErrorState(err instanceof Error ? err.message : "Gagal ganti workspace");
+      setErrorState(err instanceof Error ? err.message : "Failed to switch workspace");
       setIsSwitchingWorkspace(false);
     }
   };
@@ -268,7 +270,7 @@ export default function DashboardClient({
         body: JSON.stringify(payload),
       });
       const json = await res.json();
-      if (!res.ok || !json?.success) throw new Error(json?.error?.message || "Gagal menyimpan data");
+      if (!res.ok || !json?.success) throw new Error(json?.error?.message || "Failed to save expense");
       return json.data as Expense;
     },
     onSuccess: async (created) => {
@@ -277,10 +279,10 @@ export default function DashboardClient({
       try {
         await refreshSnapshot(parsePeriodFromDate(created.expenseDate));
       } catch (err) {
-        setErrorState(err instanceof Error ? err.message : "Gagal update snapshot report");
+        setErrorState(err instanceof Error ? err.message : t("dashboard.snapshotFailed"));
         return;
       }
-      setSuccessState("Pengeluaran berhasil disimpan");
+      setSuccessState(t("dashboard.expenseSaved"));
     },
     onError: (e: Error) => setErrorState(e.message),
   });
@@ -289,7 +291,7 @@ export default function DashboardClient({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/v1/workspaces/${activeWorkspaceId}/expenses/${id}`, { method: "DELETE" });
       const json = await res.json();
-      if (!res.ok || !json?.success) throw new Error(json?.error?.message || "Gagal menghapus data");
+      if (!res.ok || !json?.success) throw new Error(json?.error?.message || "Failed to delete expense");
       return id;
     },
     onSuccess: async (id) => {
@@ -300,10 +302,10 @@ export default function DashboardClient({
       try {
         await refreshSnapshot();
       } catch (err) {
-        setErrorState(err instanceof Error ? err.message : "Gagal update snapshot report");
+        setErrorState(err instanceof Error ? err.message : t("dashboard.snapshotFailed"));
         return;
       }
-      setSuccessState("Pengeluaran berhasil dihapus");
+      setSuccessState(t("dashboard.expenseDeleted"));
     },
     onError: (e: Error) => setErrorState(e.message),
   });
@@ -316,7 +318,7 @@ export default function DashboardClient({
         body: JSON.stringify(payload),
       });
       const json = await res.json();
-      if (!res.ok || !json?.success) throw new Error(json?.error?.message || "Gagal update data");
+      if (!res.ok || !json?.success) throw new Error(json?.error?.message || "Failed to update expense");
       return json.data as Expense;
     },
     onSuccess: async (updated) => {
@@ -332,10 +334,10 @@ export default function DashboardClient({
           refreshSnapshot(parsePeriodFromDate(updated.expenseDate)),
         ]);
       } catch (err) {
-        setErrorState(err instanceof Error ? err.message : "Gagal update snapshot report");
+        setErrorState(err instanceof Error ? err.message : t("dashboard.snapshotFailed"));
         return;
       }
-      setSuccessState("Pengeluaran berhasil diupdate");
+      setSuccessState(t("dashboard.expenseUpdated"));
     },
     onError: (e: Error) => setErrorState(e.message),
   });
@@ -402,7 +404,7 @@ export default function DashboardClient({
       <section className="rounded-2xl border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs text-slate-500">Workspace aktif</p>
+            <p className="text-xs text-slate-500">{t("dashboard.workspaceActive")}</p>
             <p className="text-sm font-semibold text-slate-800">{activeWorkspaceName}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -437,7 +439,7 @@ export default function DashboardClient({
             <input name="expenseDate" type="date" defaultValue={nowInput()} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5" required />
             <input name="note" placeholder="Catatan" className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5" />
             <button disabled={isCreating} type="submit" className="md:col-span-2 rounded-2xl bg-slate-900 text-white py-2.5 font-semibold disabled:opacity-60">
-              {isCreating ? "Menyimpan..." : "Simpan Pengeluaran"}
+              {isCreating ? t("dashboard.saving") : t("dashboard.saveExpense")}
             </button>
           </form>
           {notice ? (
@@ -450,12 +452,12 @@ export default function DashboardClient({
         </div>
 
         <div className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-[0_12px_32px_rgba(16,185,129,.12)]">
-          <p className="text-xs font-semibold text-emerald-700">MONTH SUMMARY</p>
+          <p className="text-xs font-semibold text-emerald-700">{t("dashboard.monthSummary")}</p>
           <p className="mt-2 text-3xl font-extrabold text-slate-800">Rp {total.toLocaleString("id-ID")}</p>
-          <p className="text-sm text-slate-500 mt-1">Total bulan ini</p>
+          <p className="text-sm text-slate-500 mt-1">{t("dashboard.monthTotal")}</p>
 
           <div className="mt-3 space-y-2">
-            <p className="text-xs font-semibold text-slate-600">Undang Kolaborator</p>
+            <p className="text-xs font-semibold text-slate-600">{t("dashboard.inviteCollaborator")}</p>
             <div className="flex gap-2">
               <select
                 value={inviteRole}
@@ -472,15 +474,15 @@ export default function DashboardClient({
                 disabled={isCreatingInvite || !isOwner}
                 className="rounded-xl border border-emerald-300 px-3 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-60"
               >
-                {isCreatingInvite ? "Membuat..." : "Generate"}
+                {isCreatingInvite ? t("dashboard.generating") : t("dashboard.generate")}
               </button>
             </div>
           </div>
-          {!isOwner ? <p className="mt-2 text-[11px] text-slate-500">Hanya OWNER yang bisa membuat/revoke invite.</p> : null}
+          {!isOwner ? <p className="mt-2 text-[11px] text-slate-500">{t("dashboard.onlyOwnerInvite")}</p> : null}
 
           {inviteUrl ? (
             <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
-              <p className="text-[11px] text-slate-500">Link invite terbaru</p>
+              <p className="text-[11px] text-slate-500">{t("dashboard.linkLatest")}</p>
               <a
                 href={inviteUrl}
                 target="_blank"
@@ -496,7 +498,7 @@ export default function DashboardClient({
                 disabled={isCopyingInvite}
                 className="mt-2 rounded-lg border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 disabled:opacity-60"
               >
-                {isCopyingInvite ? "Copying..." : "Copy Link"}
+                {isCopyingInvite ? t("dashboard.copying") : t("dashboard.copyLink")}
               </button>
             </div>
           ) : null}
@@ -508,8 +510,8 @@ export default function DashboardClient({
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-[11px] text-slate-600">{invite.role} • {new Date(invite.expiresAt).toLocaleString("id-ID")}</span>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => copyInviteLink(invite.url)} className="text-[11px] text-indigo-600 disabled:opacity-60" disabled={isCopyingInvite}>Copy</button>
-                      <button disabled={!isOwner} onClick={() => revokeInvite(invite.id)} className="text-[11px] text-rose-600 disabled:opacity-60">Revoke</button>
+                      <button onClick={() => copyInviteLink(invite.url)} className="text-[11px] text-indigo-600 disabled:opacity-60" disabled={isCopyingInvite}>{t("dashboard.copy")}</button>
+                      <button disabled={!isOwner} onClick={() => revokeInvite(invite.id)} className="text-[11px] text-rose-600 disabled:opacity-60">{t("dashboard.revoke")}</button>
                     </div>
                   </div>
                   <a href={invite.url} target="_blank" rel="noreferrer" title={invite.url} className="mt-1 block w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-slate-500 underline">
@@ -552,7 +554,7 @@ export default function DashboardClient({
                         <p className="font-bold text-slate-800">Rp {Number(e.amount).toLocaleString("id-ID")}</p>
                         <div className="flex items-center justify-end gap-2">
                           <button onClick={() => startEdit(e)} className="text-xs text-indigo-600">Edit</button>
-                          <button disabled={isDeleting} onClick={() => deleteMutation.mutate(e.id)} className="text-xs text-rose-600 disabled:opacity-60">{isDeleting ? "Menghapus..." : "Hapus"}</button>
+                          <button disabled={isDeleting} onClick={() => deleteMutation.mutate(e.id)} className="text-xs text-rose-600 disabled:opacity-60">{isDeleting ? t("dashboard.deleting") : t("dashboard.delete")}</button>
                         </div>
                       </div>
                     </div>
@@ -570,7 +572,7 @@ export default function DashboardClient({
                       <input value={editForm.note} onChange={(ev) => setEditForm({ ...editForm, note: ev.target.value })} placeholder="Catatan" className="rounded-xl border border-slate-200 bg-white px-3 py-2" />
                       <div className="md:col-span-2 flex items-center gap-2 justify-end">
                         <button onClick={() => { setEditingId(null); setEditForm(null); }} className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm">Batal</button>
-                        <button disabled={isUpdating} onClick={() => submitEdit(e.id)} className="rounded-xl bg-indigo-600 text-white px-3 py-1.5 text-sm disabled:opacity-60">{isUpdating ? "Menyimpan..." : "Simpan"}</button>
+                        <button disabled={isUpdating} onClick={() => submitEdit(e.id)} className="rounded-xl bg-indigo-600 text-white px-3 py-1.5 text-sm disabled:opacity-60">{isUpdating ? t("dashboard.saving") : t("dashboard.saveExpense")}</button>
                       </div>
                     </div>
                   )}
