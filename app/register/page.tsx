@@ -57,7 +57,7 @@ export default function RegisterPage() {
         throw new Error(t(mapApiErrorKey(backendMessage, "auth.registerFailed")));
       }
 
-      router.replace("/dashboard");
+      router.replace("/login?registered=1");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("auth.registerFailed"));

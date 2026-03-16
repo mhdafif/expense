@@ -9,6 +9,7 @@ import { mapApiErrorKey } from "@/lib/api-error-map";
 export default function LoginPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const [registeredHint, setRegisteredHint] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,6 +19,10 @@ export default function LoginPage() {
   useEffect(() => {
     const run = async () => {
       try {
+        if (typeof window !== "undefined") {
+          const params = new URLSearchParams(window.location.search);
+          setRegisteredHint(params.get("registered") === "1");
+        }
         const res = await fetch("/api/auth/get-session", { cache: "no-store" });
         const text = await res.text();
         const json = text ? JSON.parse(text) : null;
@@ -45,13 +50,17 @@ export default function LoginPage() {
       });
 
       const text = await res.text();
-      let json: { message?: string; error?: { message?: string } } | null = null;
+      let json: { message?: string; code?: string; error?: { message?: string; code?: string } } | null = null;
       try {
         json = text ? JSON.parse(text) : null;
       } catch {
         json = null;
       }
       if (!res.ok) {
+        const backendCode = String(json?.code || json?.error?.code || "");
+        if (backendCode === "EMAIL_NOT_VERIFIED") {
+          throw new Error(t("auth.emailNotVerified"));
+        }
         const backendMessage = String(json?.message || json?.error?.message || "");
         throw new Error(t(mapApiErrorKey(backendMessage, "auth.loginFailed")));
       }
@@ -101,9 +110,13 @@ export default function LoginPage() {
           </button>
         </form>
 
+        {registeredHint ? <p className="mt-3 text-sm text-emerald-600">{t("auth.registerSuccessCheckEmail")}</p> : null}
         {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
 
         <p className="mt-4 text-sm text-slate-600">
+          <Link className="text-indigo-600 underline" href="/forgot-password">{t("auth.forgotPassword")}</Link>
+        </p>
+        <p className="mt-2 text-sm text-slate-600">
           {t("auth.noAccount")} <Link className="text-indigo-600 underline" href="/register">{t("auth.registerButton")}</Link>
         </p>
       </div>

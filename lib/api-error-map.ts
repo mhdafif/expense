@@ -1,6 +1,7 @@
 const MESSAGE_TO_KEY: Array<[pattern: RegExp, key: string]> = [
   [/invalid\s*(email|credential|password)|credential/i, "errors.invalidCredentials"],
   [/already\s*(exists|registered)|email.*already/i, "errors.emailExists"],
+  [/email.*not\s*verified/i, "auth.emailNotVerified"],
   [/unauthorized/i, "errors.unauthorized"],
   [/workspace access denied/i, "errors.workspaceAccessDenied"],
   [/only owner can create invite/i, "errors.onlyOwnerCreateInvite"],

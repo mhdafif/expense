@@ -7,6 +7,7 @@ test("maps known backend error messages to translation keys", () => {
   assert.equal(mapApiErrorKey("Workspace access denied", "fallback"), "errors.workspaceAccessDenied");
   assert.equal(mapApiErrorKey("Unauthorized", "fallback"), "errors.unauthorized");
   assert.equal(mapApiErrorKey("Invite expired", "fallback"), "join.inviteExpired");
+  assert.equal(mapApiErrorKey("Email not verified", "fallback"), "auth.emailNotVerified");
 });
 
 test("returns fallback key for unknown/empty message", () => {
